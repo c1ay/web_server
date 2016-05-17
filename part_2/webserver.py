@@ -45,10 +45,22 @@ class WSGIServer(object):
         self.finish_response(result)
 
     def parse_request(self, text):
-        pass
+        request_line = text.splitlines()[0]
+        request_line = request_line.rstrip('\r\n')
+        (self.request_method,  # GET
+         self.path,            # /hello
+         self.request_version  # HTTP/1.1
+         ) = request_line.split()
 
     def get_environ(self):
-        pass
+        env = {}
+        env['wsgi.version']      = (1, 0)
+        env['wsgi.url_scheme']   = 'http'
+        env['PATH_INFO']         = self.path 
+        env['REQUEST_METHOD']    = self.request_method 
+        env['SERVER_NAME']       = self.server_name 
+        env['SERVER_PORT']       = str(self.server_port) 
+
 
     def start_response(self):
         pass
