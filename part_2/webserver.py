@@ -1,6 +1,7 @@
 #coding:utf-8
 import socket
 import sys
+import StringIO
 
 class WSGIServer(object):
     '''
@@ -15,7 +16,7 @@ class WSGIServer(object):
                 self.address_family,
                 self.socket_type
                 )
-        listen_socket.setsockopt(socket.SOL_SOCKET, sockdet.SO_REUSEADDR, 1)
+        listen_socket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
         listen_socket.bind(server_address)
         listen_socket.listen(self.request_queue_size)
         host, port = self.listen_socket.getsockname()[:2]
@@ -56,15 +57,53 @@ class WSGIServer(object):
         env = {}
         env['wsgi.version']      = (1, 0)
         env['wsgi.url_scheme']   = 'http'
+        env['wsgi.input']        = StringIO.StringIO(self.request_data)
         env['PATH_INFO']         = self.path 
         env['REQUEST_METHOD']    = self.request_method 
         env['SERVER_NAME']       = self.server_name 
         env['SERVER_PORT']       = str(self.server_port) 
+        return env
 
 
-    def start_response(self):
-        pass
+    def start_response(self, status, response_headers, exc_info=None):
+        server_headers = [
+                ('Date', 'Tue, 31 Mar 2016 12:00:00 GMT'),
+                ('Server', 'WSGIServer 0.2'),
+                ]
+        self.headers_set = [status, response_headers]
 
-    def finish_response(self):
-        pass
+    def finish_response(self, result):
+        try:
+            status, response_headers = self.headers_set
+            response = 'HTTP/1.1 {status}\r\n'.format(status=status)
+            for header in response_headers:
+                response += '{0}: {1}\r\n'.format(*header)
+            response += '\r\n'
+            for data in result:
+                response += data
+            print(''.join(
+                '>{line}\n'.format(line=line)
+                for line in response.splitlines()
+                ))
+            self.client_connection.sendall(response)
+        finally:
+            self.client_connection.close()
+
+SERVER_ADDRESS = (HOST, PORT) = '', 12345
+
+def make_server(server_address, application):
+    server = WSGIServer(server_address)
+    server.set_app(application)
+    return server
+
+if __name__ == '__main__':
+    if len(sys.argv) < 2:
+        sys.exit('usage  module:callable')
+    app_path = sys.argv[1]
+    module, application = app_path.split(':')
+    module = __import__(module)
+    application = getattr(module, application)
+    httpd = make_server(SERVER_ADDRESS, application)
+    print('WSGIServer: Serving HTTP on port {port}...\n'.format(port=PORT))
+    httpd.serve_forever()
                
